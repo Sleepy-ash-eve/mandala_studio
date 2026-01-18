@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mandala Studio</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Controls -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h1>Mandala</h1>
+                <span>Studio</span>
+            </div>
+
+            <div class="tool-group">
+                <h3>Tools</h3>
+                <div class="tools-grid">
+                    <button class="tool-btn active" id="pencil-tool" title="Pencil">
+                        <i class="fa-solid fa-pencil"></i>
+                    </button>
+                    <button class="tool-btn" id="bucket-tool" title="Fill Bucket">
+                        <i class="fa-solid fa-fill-drip"></i>
+                    </button>
+                    <button class="tool-btn" id="eraser-tool" title="Eraser">
+                        <i class="fa-solid fa-eraser"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="tool-group">
+                <h3>Style</h3>
+                <div class="control-row">
+                    <label>Color</label>
+                    <input type="color" id="color-picker" value="#00d2ff">
+                </div>
+                <div class="control-row">
+                    <label>Brush Size</label>
+                    <input type="range" id="brush-size" min="1" max="50" value="5">
+                </div>
+            </div>
+
+            <div class="tool-group">
+                <h3>Symmetry</h3>
+                <div class="control-row">
+                    <label>Segments: <span id="segment-value">12</span></label>
+                    <input type="range" id="segment-count" min="2" max="36" value="12">
+                </div>
+                <div class="control-row checkbox-row">
+                    <label for="mirror-mode">Mirror Sectors</label>
+                    <input type="checkbox" id="mirror-mode" checked>
+                </div>
+                <div class="control-row checkbox-row">
+                    <label for="show-guides">Show Guides</label>
+                    <input type="checkbox" id="show-guides" checked>
+                </div>
+            </div>
+
+            <div class="action-group">
+                <button class="action-btn secondary" id="clear-canvas">
+                    <i class="fa-solid fa-trash"></i> Clear
+                </button>
+                <button class="action-btn primary" id="export-btn">
+                    <i class="fa-solid fa-download"></i> Export JPG
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Canvas Area -->
+        <main class="canvas-area">
+            <div class="canvas-wrapper" style="position: relative;">
+                <canvas id="mandala-canvas" style="position: absolute; top: 0; left: 0; z-index: 1;"></canvas>
+                <canvas id="guide-canvas"
+                    style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;"></canvas>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>
