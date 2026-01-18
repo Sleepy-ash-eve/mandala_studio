@@ -21,6 +21,12 @@
                 <span>Studio</span>
             </div>
 
+            <div class="action-group" style="margin-top: 0; margin-bottom: 2rem;">
+                <button class="action-btn primary" id="gallery-btn">
+                    <i class="fa-solid fa-images"></i> My Gallery
+                </button>
+            </div>
+
             <div class="tool-group">
                 <h3>Tools</h3>
                 <div class="tools-grid">
@@ -64,6 +70,18 @@
                 </div>
             </div>
 
+            <div class="tool-group">
+                <h3>History</h3>
+                <div class="action-group">
+                    <button class="action-btn secondary" id="undo-btn">
+                        <i class="fa-solid fa-rotate-left"></i> Undo
+                    </button>
+                    <button class="action-btn secondary" id="redo-btn">
+                        <i class="fa-solid fa-rotate-right"></i> Redo
+                    </button>
+                </div>
+            </div>
+
             <div class="action-group">
                 <button class="action-btn secondary" id="clear-canvas">
                     <i class="fa-solid fa-trash"></i> Clear
@@ -83,6 +101,25 @@
             </div>
         </main>
     </div>
+
+    <!-- Gallery Overlay -->
+    <div id="gallery-overlay" class="hidden">
+        <div class="gallery-header">
+            <h2>My Creations</h2>
+            <div class="gallery-actions">
+                <button class="action-btn primary" id="new-artwork-btn">
+                    <i class="fa-solid fa-plus"></i> New Artwork
+                </button>
+                <button class="action-btn secondary" id="close-gallery-btn">
+                    <i class="fa-solid fa-xmark"></i> Close
+                </button>
+            </div>
+        </div>
+        <div class="gallery-grid" id="gallery-grid">
+            <!-- Gallery items will be injected here -->
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 

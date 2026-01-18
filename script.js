@@ -24,8 +24,206 @@ document.addEventListener('DOMContentLoaded', () => {
         lastX: 0,
         lastY: 0,
         centerX: 0,
-        centerY: 0
+        centerY: 0,
+        undoStack: [],
+        redoStack: [],
+        gallery: [],
+        currentArtworkId: null // Timestamp ID
     };
+
+    // Gallery Functions
+    function initGallery() {
+        const storedGallery = localStorage.getItem('mandala_gallery');
+        if (storedGallery) {
+            state.gallery = JSON.parse(storedGallery);
+        }
+
+        // If we have a 'current' ID saved, try to use it, otherwise create new
+        const lastId = localStorage.getItem('mandala_current_id');
+        if (lastId && state.gallery.find(item => item.id == lastId)) {
+            state.currentArtworkId = parseInt(lastId);
+            // The canvas content is loaded via 'loadHistory' which checks 'mandala_current'
+            // We assume 'mandala_current' matches the visual state of 'currentArtworkId' roughly
+        } else {
+            // No current artwork? Create one.
+            createNewArtwork();
+        }
+    }
+
+    function createNewArtwork() {
+        state.currentArtworkId = Date.now();
+        state.undoStack = [];
+        state.redoStack = [];
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear visual
+
+        const newArt = {
+            id: state.currentArtworkId,
+            name: "Untitled Artwork",
+            date: new Date().toLocaleDateString(),
+            data: canvas.toDataURL()
+        };
+
+        state.gallery.unshift(newArt);
+        saveGalleryToStorage();
+        updateLocalStorage(); // Wipe history stacks
+
+        // Ensure we switch off any active tools or resetting? No, keep tool
+    }
+
+    function saveToGallery() {
+        if (!state.currentArtworkId) return;
+
+        const idx = state.gallery.findIndex(item => item.id === state.currentArtworkId);
+        if (idx !== -1) {
+            state.gallery[idx].data = canvas.toDataURL();
+            // Move to top? maybe not, just update data
+            saveGalleryToStorage();
+        }
+    }
+
+    // Debounce saveToGallery to avoid lag
+    let saveTimeout;
+    function autoSave() {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(saveToGallery, 1000); // Save 1s after last change
+    }
+
+    function saveGalleryToStorage() {
+        try {
+            localStorage.setItem('mandala_gallery', JSON.stringify(state.gallery));
+            localStorage.setItem('mandala_current_id', state.currentArtworkId);
+        } catch (e) {
+            console.error("Gallery storage full", e);
+            alert("Storage full! Please delete some artworks.");
+        }
+    }
+
+    function loadArtwork(id) {
+        const art = state.gallery.find(item => item.id === id);
+        if (!art) return;
+
+        state.currentArtworkId = id;
+        state.undoStack = []; // Reset history for new session on this artwork (simple approach)
+        state.redoStack = [];
+
+        restoreCanvas(art.data);
+
+        // Update current state for refresh persistence
+        localStorage.setItem('mandala_current', art.data);
+        localStorage.setItem('mandala_current_id', id);
+        localStorage.setItem('mandala_undo', "[]");
+        localStorage.setItem('mandala_redo', "[]");
+
+        toggleGallery(false);
+    }
+
+    // UI Rendering
+    function renderGallery() {
+        const grid = document.getElementById('gallery-grid');
+        grid.innerHTML = '';
+
+        state.gallery.forEach(art => {
+            const el = document.createElement('div');
+            el.className = 'gallery-item';
+            el.innerHTML = `
+                <img src="${art.data}">
+                <div class="gallery-info">
+                    <div class="gallery-title">${art.name}</div>
+                    <div class="gallery-date">${art.date}</div>
+                </div>
+            `;
+            el.addEventListener('click', () => loadArtwork(art.id));
+            grid.appendChild(el);
+        });
+    }
+
+    function toggleGallery(show) {
+        const overlay = document.getElementById('gallery-overlay');
+        if (show) {
+            renderGallery();
+            overlay.classList.remove('hidden');
+        } else {
+            overlay.classList.add('hidden');
+        }
+    }
+
+    // History & Persistence
+    function saveState() {
+        // Save current canvas to undo stack
+        state.undoStack.push(canvas.toDataURL());
+
+        // Limit to 5 states
+        if (state.undoStack.length > 5) {
+            state.undoStack.shift();
+        }
+
+        // Clear redo stack on new action
+        state.redoStack = [];
+
+        // Persist
+        updateLocalStorage();
+        autoSave(); // Update gallery thumbnail
+    }
+
+    function updateLocalStorage() {
+        try {
+            localStorage.setItem('mandala_undo', JSON.stringify(state.undoStack));
+            localStorage.setItem('mandala_redo', JSON.stringify(state.redoStack));
+            // Also save current state so refresh doesn't wipe (this acts as the 'working copy')
+            localStorage.setItem('mandala_current', canvas.toDataURL());
+        } catch (e) {
+            console.error('LocalStorage quota exceeded probably', e);
+        }
+    }
+
+    function loadHistory() {
+        const u = localStorage.getItem('mandala_undo');
+        const r = localStorage.getItem('mandala_redo');
+        const c = localStorage.getItem('mandala_current');
+
+
+        if (u) state.undoStack = JSON.parse(u);
+        if (r) state.redoStack = JSON.parse(r);
+
+        // We do NOT restore the current canvas automatically on reload anymore
+        // as per user feedback that they want a clean slate.
+        // The history is preserved in undoStack though.
+    }
+
+    function undo() {
+        if (state.undoStack.length === 0) return;
+
+        // Current state goes to redo
+        state.redoStack.push(canvas.toDataURL());
+
+        const prevData = state.undoStack.pop();
+        restoreCanvas(prevData);
+        updateLocalStorage();
+    }
+
+    function redo() {
+        if (state.redoStack.length === 0) return;
+
+        // Current state goes to undo
+        state.undoStack.push(canvas.toDataURL());
+
+        const nextData = state.redoStack.pop();
+        restoreCanvas(nextData);
+        updateLocalStorage();
+    }
+
+    function restoreCanvas(dataUrl) {
+        const img = new Image();
+        img.onload = () => {
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to draw 1:1
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            ctx.restore();
+        };
+        img.src = dataUrl;
+    }
 
     // Initialization
     function resizeCanvas() {
@@ -188,15 +386,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function colorsMatch(a, b) {
-        // Tolerance
-        return Math.abs(a[0] - b.r) < 5 && Math.abs(a[1] - b.g) < 5 && Math.abs(a[2] - b.b) < 5 && Math.abs(a[3] - b.a) < 5;
+        // Tolerance - strict 10, relying on dilation for edges
+        return Math.abs(a[0] - b.r) < 10 && Math.abs(a[1] - b.g) < 10 && Math.abs(a[2] - b.b) < 10 && Math.abs(a[3] - b.a) < 10;
     }
 
     function bucketFill(startX, startY) {
         const dpr = window.devicePixelRatio || 1;
-        // Bucket fill needs to work on raw canvas pixels, so logic coords -> pixel coords
-        // Actually, our coords are CSS pixels, canvas is scaled. 
-        // We should scale inputs.
+
         const px = Math.floor(startX * dpr);
         const py = Math.floor(startY * dpr);
 
@@ -204,36 +400,106 @@ document.addEventListener('DOMContentLoaded', () => {
         const height = canvas.height;
 
         const imgData = ctx.getImageData(0, 0, width, height);
-        const pixelData = imgData.data;
+        // We do NOT write to imgData (main canvas) directly anymore.
+        // We read from it for collision, but write to a separate mask.
+
         const fillColor = hexToRgba(state.color);
 
         // Initial color
         const startColorArray = getPixel(imgData, px, py);
         const startColor = { r: startColorArray[0], g: startColorArray[1], b: startColorArray[2], a: startColorArray[3] };
 
-        if (colorsMatch([fillColor.r, fillColor.g, fillColor.b, fillColor.a], startColor)) return; // Same color
+        // Prevent filling if same color
+        if (colorsMatch([fillColor.r, fillColor.g, fillColor.b, fillColor.a], startColor)) return;
+
+        // Semantic check: if we are clicking on a line (not background), maybe we shouldn't fill?
+        // But let's assume user clicks on empty space.
+
+        // Create a temp canvas for the fill mask
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+        const fillImgData = tempCtx.createImageData(width, height);
+        const fillData = fillImgData.data;
+
+        // Helper to set pixel in fillData
+        // We set it to the fill color immediately
+        // Optimization: We could just set Alpha=255 and use fillRect later, but setting color is easy.
+        function setFillPixel(x, y) {
+            const offset = (y * width + x) * 4;
+            fillData[offset] = fillColor.r;
+            fillData[offset + 1] = fillColor.g;
+            fillData[offset + 2] = fillColor.b;
+            fillData[offset + 3] = fillColor.a;
+        }
 
         const stack = [[px, py]];
+        // Track visited pixels to allow filling same-color areas without infinite loops
+        // Since we are not modifying imgData, we need a separate visited array.
+        // Uint8Array is fast. 0=unvisited, 1=visited.
+        const visited = new Uint8Array(width * height);
+
+        function markVisited(x, y) {
+            visited[y * width + x] = 1;
+        }
+        function isVisited(x, y) {
+            return visited[y * width + x] === 1;
+        }
+
+        markVisited(px, py);
 
         while (stack.length > 0) {
             const [cx, cy] = stack.pop();
             const currentPixel = getPixel(imgData, cx, cy);
 
             if (colorsMatch(currentPixel, startColor)) {
-                const offset = (cy * width + cx) * 4;
-                pixelData[offset] = fillColor.r;
-                pixelData[offset + 1] = fillColor.g;
-                pixelData[offset + 2] = fillColor.b;
-                pixelData[offset + 3] = fillColor.a;
+                setFillPixel(cx, cy);
 
-                stack.push([cx + 1, cy]);
-                stack.push([cx - 1, cy]);
-                stack.push([cx, cy + 1]);
-                stack.push([cx, cy - 1]);
+                const neighbors = [
+                    [cx + 1, cy],
+                    [cx - 1, cy],
+                    [cx, cy + 1],
+                    [cx, cy - 1]
+                ];
+
+                for (const [nx, ny] of neighbors) {
+                    if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                        if (!isVisited(nx, ny)) {
+                            markVisited(nx, ny);
+                            stack.push([nx, ny]);
+                        }
+                    }
+                }
             }
         }
 
-        ctx.putImageData(imgData, 0, 0);
+        tempCtx.putImageData(fillImgData, 0, 0);
+
+        // Now composite the fill "Behind" the existing lines
+        // Dilation: Draw multiple times to cover edges
+        ctx.save();
+
+        // Reset transform to identity so we draw 1:1 with device pixels
+        // This prevents double-scaling since tempCanvas is already full device resolution
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+        ctx.globalCompositeOperation = 'destination-over';
+
+        // Center
+        ctx.drawImage(tempCanvas, 0, 0);
+
+        // Dilate by 1 pixel in 4 directions to fill the anti-aliasing gap
+        ctx.drawImage(tempCanvas, 1, 0);
+        ctx.drawImage(tempCanvas, -1, 0);
+        ctx.drawImage(tempCanvas, 0, 1);
+        ctx.drawImage(tempCanvas, 0, -1);
+
+        // Optional: Dilate by 2 pixels for thicker lines or smoother transitions
+        // ctx.drawImage(tempCanvas, 1, 1);
+        // ctx.drawImage(tempCanvas, -1, -1);
+
+        ctx.restore();
     }
 
     // Symmetric Bucket Fill Wrapper
@@ -282,13 +548,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event Listeners
     canvas.addEventListener('mousedown', (e) => {
+        saveState(); // Save before drawing
         state.isDrawing = true;
         const coords = getCoordinates(e);
         state.lastX = coords.x;
         state.lastY = coords.y;
 
         if (state.currentTool === tools.BUCKET) {
+            // Undo save already called in mousedown
             symmetricBucketFill(state.lastX, state.lastY);
+            updateLocalStorage(); // Save the result of the bucket fill as 'current'
             state.isDrawing = false; // Bucket is one-click
         } else {
             // Draw a dot
@@ -305,7 +574,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('mouseup', () => {
-        state.isDrawing = false;
+        if (state.isDrawing) {
+            state.isDrawing = false;
+            updateLocalStorage(); // Save state after stroke completion
+        }
         ctx.beginPath(); // Reset path
     });
 
@@ -344,7 +616,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('clear-canvas').addEventListener('click', () => {
+        saveState();
         ctx.clearRect(0, 0, canvas.width, canvas.height); // Correctly clear scaled canvas
+        updateLocalStorage();
     });
 
     document.getElementById('export-btn').addEventListener('click', () => {
@@ -370,9 +644,44 @@ document.addEventListener('DOMContentLoaded', () => {
         link.click();
     });
 
+
+
+    // History Buttons
+    document.getElementById('undo-btn').addEventListener('click', undo);
+    document.getElementById('redo-btn').addEventListener('click', redo);
+
     // Handle Window Resize
     window.addEventListener('resize', resizeCanvas);
 
     // Initial setup
     resizeCanvas();
+    initGallery();
+    loadHistory(); // Load the 'working copy' which might be more recent than the gallery thumb
+
+    // Gallery Events
+    document.getElementById('gallery-btn').addEventListener('click', () => toggleGallery(true));
+    document.getElementById('close-gallery-btn').addEventListener('click', () => toggleGallery(false));
+    document.getElementById('new-artwork-btn').addEventListener('click', () => {
+        createNewArtwork();
+        toggleGallery(false);
+    });
+
+    // Rename Shortcut
+    document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+            e.preventDefault();
+            if (!state.currentArtworkId) return;
+
+            const art = state.gallery.find(item => item.id === state.currentArtworkId);
+            if (art) {
+                const newName = prompt("Rename Artwork:", art.name);
+                if (newName) {
+                    art.name = newName;
+                    saveGalleryToStorage();
+                    // Optional: Toast message
+                }
+            }
+        }
+    });
+
 });
